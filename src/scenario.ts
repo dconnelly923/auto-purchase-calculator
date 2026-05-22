@@ -48,17 +48,17 @@ export type ScenarioResult = {
 export function makeDefaultScenario(name = "Scenario 1"): Scenario {
   return {
     name,
-    msrp: 38000,
+    msrp: 44000,
     dealerDiscount: 1500,
     customerCash: 0,
-    tradeIn: 8000,
+    tradeIn: 4000,
     manufacturerRebate: 0,
     financingConditionalCash: 0,
     otherIncentive: 0,
     otherIncentiveIsPretax: true,
     fees: { ...DEFAULT_MD_FEES },
     excisTaxRate: DEFAULT_TAX_CONFIG.excisTaxRate,
-    downPayment: 3000,
+    downPayment: 10000,
     useManufacturerFinancing: true,
     extraMonthlyPrincipal: 0,
     aprTiers: [
