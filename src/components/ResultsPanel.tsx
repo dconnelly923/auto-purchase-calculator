@@ -16,7 +16,6 @@ import { currency, currencyCents, percent } from "../format";
 
 type Props = {
   result: ScenarioResult;
-  showInterestSaved: boolean;
 };
 
 function HeadlineCard({ label, value }: { label: string; value: string }) {
@@ -40,16 +39,35 @@ function lowestIndex(values: number[]): number {
   return best;
 }
 
-export default function ResultsPanel({ result, showInterestSaved }: Props) {
+export default function ResultsPanel({ result }: Props) {
   const { pricing, loanScenarios, interestSavedByTier, breakEven, breakEvenTier } =
     result;
 
+  const showInterestSaved = interestSavedByTier.some((v) => v > 0);
   const bestMonthly = lowestIndex(loanScenarios.map((s) => s.monthlyPayment));
   const bestCost = lowestIndex(loanScenarios.map((s) => s.totalCost));
   const highlight = { backgroundColor: "success.light" };
 
+  const bestMonthlyScenario = loanScenarios[bestMonthly];
+
   return (
     <Stack spacing={2}>
+      <Paper variant="outlined" sx={{ p: 3, textAlign: "center" }}>
+        <Typography variant="overline" color="text.secondary">
+          Monthly Payment
+        </Typography>
+        <Typography variant="h2" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
+          {bestMonthlyScenario
+            ? currencyCents(bestMonthlyScenario.monthlyPayment)
+            : "—"}
+        </Typography>
+        {bestMonthlyScenario && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {bestMonthlyScenario.termMonths} mo @ {percent(bestMonthlyScenario.apr)}
+          </Typography>
+        )}
+      </Paper>
+
       <Stack direction="row" spacing={2}>
         <HeadlineCard
           label="Out-the-Door Price"

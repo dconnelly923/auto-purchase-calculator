@@ -15,19 +15,15 @@ type Props = {
   onChange: (patch: Partial<Scenario>) => void;
 };
 
-export default function PricingSection({ scenario, onChange }: Props) {
+export default function IncentivesSection({ scenario, onChange }: Props) {
   return (
     <Accordion defaultExpanded>
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Typography variant="h6">Pricing &amp; Incentives</Typography>
+        <Typography variant="h6">
+          What the Dealer &amp; Manufacturer Are Bringing
+        </Typography>
       </AccordionSummary>
       <AccordionDetails>
-        <NumberField
-          label="MSRP / Agreed Price"
-          value={scenario.msrp}
-          onChange={(v) => onChange({ msrp: v })}
-          max={100000}
-        />
         <NumberField
           label="Dealer Discount (pre-tax)"
           value={scenario.dealerDiscount}
@@ -43,13 +39,6 @@ export default function PricingSection({ scenario, onChange }: Props) {
           helperText="Reduces taxable price"
         />
         <NumberField
-          label="Trade-In Allowance (pre-tax)"
-          value={scenario.tradeIn}
-          onChange={(v) => onChange({ tradeIn: v })}
-          max={50000}
-          helperText="Deductible from MD taxable base"
-        />
-        <NumberField
           label="Manufacturer Rebate (post-tax)"
           value={scenario.manufacturerRebate}
           onChange={(v) => onChange({ manufacturerRebate: v })}
@@ -62,6 +51,18 @@ export default function PricingSection({ scenario, onChange }: Props) {
           onChange={(v) => onChange({ financingConditionalCash: v })}
           max={10000}
           helperText="Applies only with manufacturer financing"
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={scenario.useManufacturerFinancing}
+              onChange={(e) =>
+                onChange({ useManufacturerFinancing: e.target.checked })
+              }
+            />
+          }
+          label="Using manufacturer financing"
+          sx={{ mb: 1 }}
         />
         <NumberField
           label="Other Incentive"

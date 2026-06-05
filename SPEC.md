@@ -10,7 +10,7 @@ A browser-based tool for evaluating mid-size pickup truck purchase offers in Mar
 - **Build tool:** Vite
 - **Language:** TypeScript
 - **Component library:** MUI (Material-UI)
-- **State:** React built-in (`useState` / `useReducer`) + a custom `useLocalStorage` hook
+- **State:** React built-in (`useState` / `useReducer`); scenarios held in memory for the session only, not persisted
 - **Testing:** Vitest, scoped to math functions only (tax calc, amortization, extra principal, break-even)
 - **Runtime:** Local only via `npm run dev`. No backend, no database, no hosting.
 
@@ -38,21 +38,27 @@ A browser-based tool for evaluating mid-size pickup truck purchase offers in Mar
 
 ## 3. Inputs
 
-### 3.1 Pricing (itemized build-up)
-- MSRP
+Inputs are grouped in the UI by who is contributing what.
+
+### 3.1 Vehicle Price
+- MSRP / agreed price
+
+### 3.2 What I'm Bringing (buyer contributions)
+- Down payment (number field + slider)
+- Trade-in allowance (pre-tax, MD-deductible)
+
+### 3.3 What the Dealer & Manufacturer Are Bringing (incentives)
 - Dealer discount (pre-tax)
 - Customer cash incentive (pre-tax)
-- Trade-in allowance (pre-tax, MD-deductible)
 - Manufacturer rebate (post-tax)
-- Financing-conditional cash (post-tax; only applies when manufacturer financing is used)
+- Financing-conditional cash (post-tax; only applies when manufacturer financing is used — gated by the "using manufacturer financing" toggle here)
 - Other incentive (with pre/post-tax toggle — for Costco/AAA-style discounts)
 
-### 3.2 Financing
-- Down payment (number field + slider)
+### 3.4 Financing
 - APR tier schedule — a table of `{term_months, apr}` rows (e.g., 36mo/0%, 48mo/1.9%, 60mo/3.9%, 72mo/4.9%)
-- Extra monthly principal payment (number field + slider)
+- Total monthly payment (number field + slider) — the amount above the scheduled payment for a given tier is applied to principal
 
-### 3.3 Investment-vs-loan break-even
+### 3.5 Investment-vs-loan break-even
 - Available cash on hand
 - After-tax HYSA APY (helper text: "for a HYSA at X%, enter X × (1 − marginal tax rate)")
 
@@ -92,8 +98,8 @@ total_interest = (M × n) − P
 total_cost = (M × n) + down_payment + manufacturer_rebate (already paid out)
 ```
 
-### 4.5 Extra principal payments — interest saved
-Month-by-month simulation: apply scheduled payment + extra principal each month until balance = 0. Sum interest. Compare to baseline (no extra principal). Output: `interest_saved = baseline_interest − accelerated_interest`.
+### 4.5 Total monthly payment — interest saved
+The user enters a single target total monthly payment. For each APR tier, the extra principal is `max(0, total_monthly_payment − scheduled_payment_for_tier)` — i.e., whatever is left after satisfying that tier's required payment goes to principal. Month-by-month simulation: apply scheduled payment + extra principal each month until balance = 0. Sum interest. Compare to baseline. Output: `interest_saved = baseline_interest − accelerated_interest` (computed per tier). A target below a tier's scheduled payment yields zero extra principal for that tier.
 
 ### 4.6 Investment-vs-loan break-even
 Assumes monthly payments come from income (not the cash reserve) and the cash reserve sits in HYSA for the loan term.
@@ -123,10 +129,9 @@ Headline numbers (always visible):
 
 ## 6. Scenario Management
 
-- **Named saved scenarios** persisted in `localStorage`
-- **Side-by-side comparison view** showing 2+ scenarios as parallel columns
-- **Auto-highlighted winning cell per row** (e.g., lowest monthly payment, lowest total cost) — green highlight, no opinionated recommendation
-- **JSON export/import** for portability between devices
+- **Named scenarios** held in memory for the current session — not persisted; a browser refresh resets to the default scenario
+- **Side-by-side comparison view** showing 2+ scenarios as parallel columns, compared at a selectable loan term
+- **Auto-highlighted winning cell per row** (e.g., lowest monthly payment, lowest total paid) — green highlight, no opinionated recommendation
 
 ---
 
@@ -153,6 +158,8 @@ Explicitly NOT included:
 - Full amortization tables (only interest saved for extra principal)
 - Months-shaved / new payoff date for extra principal
 - Dedicated APR break-even solver (achievable interactively via comparison view + sliders)
+- Persistence of any kind — no localStorage, no saved files; scenarios are session-only
+- JSON export/import
 - PDF export
 - Shareable URL links
 - Backend, database, hosted deployment

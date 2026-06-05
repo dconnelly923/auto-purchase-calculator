@@ -4,11 +4,9 @@ import {
   AccordionSummary,
   Divider,
   FormControl,
-  FormControlLabel,
   InputLabel,
   MenuItem,
   Select,
-  Switch,
   Typography,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -28,33 +26,6 @@ export default function FinancingSection({ scenario, onChange }: Props) {
         <Typography variant="h6">Financing</Typography>
       </AccordionSummary>
       <AccordionDetails>
-        <NumberField
-          label="Down Payment"
-          value={scenario.downPayment}
-          onChange={(v) => onChange({ downPayment: v })}
-          max={50000}
-        />
-        <FormControlLabel
-          control={
-            <Switch
-              checked={scenario.useManufacturerFinancing}
-              onChange={(e) =>
-                onChange({ useManufacturerFinancing: e.target.checked })
-              }
-            />
-          }
-          label="Using manufacturer financing"
-          sx={{ mb: 1 }}
-        />
-        <NumberField
-          label="Extra Monthly Principal"
-          value={scenario.extraMonthlyPrincipal}
-          onChange={(v) => onChange({ extraMonthlyPrincipal: v })}
-          max={2000}
-          step={25}
-        />
-
-        <Divider sx={{ my: 2 }} />
         <AprTierEditor
           tiers={scenario.aprTiers}
           onChange={(aprTiers) => {
@@ -67,6 +38,16 @@ export default function FinancingSection({ scenario, onChange }: Props) {
               ),
             });
           }}
+        />
+
+        <Divider sx={{ my: 2 }} />
+        <NumberField
+          label="Total Monthly Payment"
+          value={scenario.totalMonthlyPayment}
+          onChange={(v) => onChange({ totalMonthlyPayment: v })}
+          max={3000}
+          step={25}
+          helperText="Anything above a tier's scheduled payment goes to principal. Leave at 0 to just pay the scheduled amount."
         />
 
         <Divider sx={{ my: 2 }} />

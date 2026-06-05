@@ -29,7 +29,7 @@ export type Scenario = {
   // Financing
   downPayment: number;
   useManufacturerFinancing: boolean;
-  extraMonthlyPrincipal: number;
+  totalMonthlyPayment: number;
   aprTiers: AprTier[];
   // Break-even
   cashOnHand: number;
@@ -60,7 +60,7 @@ export function makeDefaultScenario(name = "Scenario 1"): Scenario {
     excisTaxRate: DEFAULT_TAX_CONFIG.excisTaxRate,
     downPayment: 10000,
     useManufacturerFinancing: true,
-    extraMonthlyPrincipal: 0,
+    totalMonthlyPayment: 0,
     aprTiers: [
       { termMonths: 36, apr: 0 },
       { termMonths: 48, apr: 1.9 },
@@ -97,14 +97,15 @@ export function computeScenario(s: Scenario): ScenarioResult {
 
   const loanScenarios = evaluateAprTiers(pricing.amountFinanced, s.aprTiers);
 
-  const interestSavedByTier = s.aprTiers.map((t) =>
-    interestSavedFromExtraPrincipal(
+  const interestSavedByTier = loanScenarios.map((ls) => {
+    const extra = Math.max(0, s.totalMonthlyPayment - ls.monthlyPayment);
+    return interestSavedFromExtraPrincipal(
       pricing.amountFinanced,
-      t.apr,
-      t.termMonths,
-      s.extraMonthlyPrincipal,
-    ),
-  );
+      ls.apr,
+      ls.termMonths,
+      extra,
+    );
+  });
 
   const zeroDownPricing = computePricing(pricingInputs, s.fees, taxConfig, {
     downPayment: 0,
