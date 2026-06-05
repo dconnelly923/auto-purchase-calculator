@@ -9,42 +9,44 @@ import {
 
 const zeroPricing: PricingInputs = {
   msrp: 0,
-  dealerDiscount: 0,
-  customerCash: 0,
   tradeIn: 0,
-  otherIncentivePretax: 0,
-  manufacturerRebate: 0,
-  financingConditionalCash: 0,
-  otherIncentivePosttax: 0,
+  pretaxDiscounts: 0,
+  posttaxDiscounts: 0,
+  pretaxFees: 0,
+  posttaxFees: 0,
 };
 
 const zeroFinancing: FinancingInputs = {
   downPayment: 0,
-  useManufacturerFinancing: false,
 };
 
 describe("computeTaxablePrice", () => {
-  it("subtracts all pre-tax reductions from MSRP", () => {
+  it("subtracts trade-in and pre-tax discounts from MSRP", () => {
     const p: PricingInputs = {
       ...zeroPricing,
       msrp: 40000,
-      dealerDiscount: 2000,
-      customerCash: 1500,
       tradeIn: 10000,
-      otherIncentivePretax: 500,
+      pretaxDiscounts: 4000,
     };
     expect(computeTaxablePrice(p)).toBe(26000);
   });
 
-  it("does NOT subtract post-tax incentives", () => {
+  it("does NOT subtract post-tax discounts", () => {
     const p: PricingInputs = {
       ...zeroPricing,
       msrp: 40000,
-      manufacturerRebate: 3000,
-      financingConditionalCash: 1000,
-      otherIncentivePosttax: 500,
+      posttaxDiscounts: 4500,
     };
     expect(computeTaxablePrice(p)).toBe(40000);
+  });
+
+  it("adds pre-tax fees to the taxable base", () => {
+    const p: PricingInputs = {
+      ...zeroPricing,
+      msrp: 40000,
+      pretaxFees: 500,
+    };
+    expect(computeTaxablePrice(p)).toBe(40500);
   });
 
   it("clamps at zero when reductions exceed MSRP", () => {
@@ -72,8 +74,8 @@ describe("computePricing", () => {
     const p: PricingInputs = {
       ...zeroPricing,
       msrp: 40000,
-      dealerDiscount: 2000,
       tradeIn: 10000,
+      pretaxDiscounts: 2000,
     };
     const result = computePricing(
       p,
@@ -92,7 +94,6 @@ describe("computePricing", () => {
     const p: PricingInputs = { ...zeroPricing, msrp: 40000 };
     const result = computePricing(p, DEFAULT_MD_FEES, DEFAULT_TAX_CONFIG, {
       downPayment: 5000,
-      useManufacturerFinancing: false,
     });
     // OTD = 40000 + 2600 (tax) + 420.5 (fees) = 43020.5
     // financed = 43020.5 - 5000 = 38020.5
@@ -100,11 +101,11 @@ describe("computePricing", () => {
     expect(result.amountFinanced).toBeCloseTo(38020.5, 2);
   });
 
-  it("applies manufacturer rebate post-tax (reduces financing only)", () => {
+  it("applies post-tax discounts to amount financed but not taxable base", () => {
     const p: PricingInputs = {
       ...zeroPricing,
       msrp: 40000,
-      manufacturerRebate: 3000,
+      posttaxDiscounts: 3000,
     };
     const result = computePricing(
       p,
@@ -112,16 +113,16 @@ describe("computePricing", () => {
       DEFAULT_TAX_CONFIG,
       zeroFinancing,
     );
-    expect(result.taxablePrice).toBe(40000); // rebate does NOT reduce taxable
+    expect(result.taxablePrice).toBe(40000);
     expect(result.excisTax).toBeCloseTo(2600, 2);
     expect(result.amountFinanced).toBeCloseTo(40000 + 2600 + 420.5 - 3000, 2);
   });
 
-  it("applies customer cash pre-tax (reduces both tax and financing)", () => {
+  it("applies pre-tax discounts to both taxable base and financed amount", () => {
     const p: PricingInputs = {
       ...zeroPricing,
       msrp: 40000,
-      customerCash: 3000,
+      pretaxDiscounts: 3000,
     };
     const result = computePricing(
       p,
@@ -134,43 +135,39 @@ describe("computePricing", () => {
     expect(result.amountFinanced).toBeCloseTo(37000 + 2405 + 420.5, 2);
   });
 
-  it("$3K customer cash beats $3K manufacturer rebate by tax savings", () => {
+  it("$3K pre-tax discount beats $3K post-tax by the tax delta", () => {
     const baseInputs: PricingInputs = { ...zeroPricing, msrp: 40000 };
-    const customerCashResult = computePricing(
-      { ...baseInputs, customerCash: 3000 },
+    const pretax = computePricing(
+      { ...baseInputs, pretaxDiscounts: 3000 },
       DEFAULT_MD_FEES,
       DEFAULT_TAX_CONFIG,
       zeroFinancing,
     );
-    const rebateResult = computePricing(
-      { ...baseInputs, manufacturerRebate: 3000 },
+    const posttax = computePricing(
+      { ...baseInputs, posttaxDiscounts: 3000 },
       DEFAULT_MD_FEES,
       DEFAULT_TAX_CONFIG,
       zeroFinancing,
     );
-    const savings =
-      rebateResult.amountFinanced - customerCashResult.amountFinanced;
+    const savings = posttax.amountFinanced - pretax.amountFinanced;
     expect(savings).toBeCloseTo(3000 * 0.065, 2); // $195
   });
 
-  it("only applies financing-conditional cash when using manufacturer financing", () => {
+  it("post-tax fees increase OTD without affecting tax", () => {
     const p: PricingInputs = {
       ...zeroPricing,
-      msrp: 40000,
-      financingConditionalCash: 1000,
+      msrp: 30000,
+      posttaxFees: 500,
     };
-    const withoutMfg = computePricing(p, DEFAULT_MD_FEES, DEFAULT_TAX_CONFIG, {
-      downPayment: 0,
-      useManufacturerFinancing: false,
-    });
-    const withMfg = computePricing(p, DEFAULT_MD_FEES, DEFAULT_TAX_CONFIG, {
-      downPayment: 0,
-      useManufacturerFinancing: true,
-    });
-    expect(withMfg.amountFinanced).toBeCloseTo(
-      withoutMfg.amountFinanced - 1000,
-      2,
+    const result = computePricing(
+      p,
+      DEFAULT_MD_FEES,
+      DEFAULT_TAX_CONFIG,
+      zeroFinancing,
     );
+    expect(result.taxablePrice).toBe(30000);
+    expect(result.excisTax).toBeCloseTo(1950, 2);
+    expect(result.outTheDoorPrice).toBeCloseTo(30000 + 1950 + 420.5 + 500, 2);
   });
 
   it("uses MD 6.5% rate by default but honors override", () => {

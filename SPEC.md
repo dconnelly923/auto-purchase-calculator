@@ -10,8 +10,8 @@ A browser-based tool for evaluating mid-size pickup truck purchase offers in Mar
 - **Build tool:** Vite
 - **Language:** TypeScript
 - **Component library:** MUI (Material-UI)
-- **State:** React built-in (`useState` / `useReducer`); scenarios held in memory for the session only, not persisted
-- **Testing:** Vitest, scoped to math functions only (tax calc, amortization, extra principal, break-even)
+- **State:** React built-in (`useState` / `useReducer`); scenarios persisted to `localStorage`
+- **Testing:** Vitest, scoped to math functions only (tax calc, amortization)
 - **Runtime:** Local only via `npm run dev`. No backend, no database, no hosting.
 
 ---
@@ -20,9 +20,10 @@ A browser-based tool for evaluating mid-size pickup truck purchase offers in Mar
 
 ### 2.1 Excise tax
 - Rate: **6.5%** (editable in UI for future-proofing)
-- Applied to: `purchase_price − dealer_discount − customer_cash − trade_in_allowance`
+- Applied to: `purchase_price − trade_in_allowance − pre_tax_discounts + pre_tax_fees`
 - Trade-in IS deductible from the taxable base (MD-specific — verified)
-- Manufacturer rebates do NOT reduce taxable amount
+- Pre-tax discounts (dealer discount, customer cash, etc.) reduce the taxable base
+- Post-tax discounts (manufacturer rebate, etc.) do NOT reduce the taxable base — applied to amount financed only
 - No book-value minimum check (out of scope)
 
 ### 2.2 Fees (itemized, all editable)
@@ -40,27 +41,29 @@ A browser-based tool for evaluating mid-size pickup truck purchase offers in Mar
 
 Inputs are grouped in the UI by who is contributing what.
 
-### 3.1 Vehicle Price
-- MSRP / agreed price
-
-### 3.2 What I'm Bringing (buyer contributions)
-- Down payment (number field + slider)
+### 3.1 Main panel (always visible)
+- Vehicle condition toggle: **new** or **used**
+- Purchase price (MSRP / agreed)
+- Down payment
 - Trade-in allowance (pre-tax, MD-deductible)
 
-### 3.3 What the Dealer & Manufacturer Are Bringing (incentives)
-- Dealer discount (pre-tax)
-- Customer cash incentive (pre-tax)
-- Manufacturer rebate (post-tax)
-- Financing-conditional cash (post-tax; only applies when manufacturer financing is used — gated by the "using manufacturer financing" toggle here)
-- Other incentive (with pre/post-tax toggle — for Costco/AAA-style discounts)
+### 3.2 Settings modals (opened from buttons under the main panel)
 
-### 3.4 Financing
-- APR tier schedule — a table of `{term_months, apr}` rows (e.g., 36mo/0%, 48mo/1.9%, 60mo/3.9%, 72mo/4.9%)
-- Total monthly payment (number field + slider) — the amount above the scheduled payment for a given tier is applied to principal
+#### Discounts
+- Empty by default. User adds custom line items with: label, amount, pre-tax/post-tax toggle.
+- Pre-tax discounts reduce the taxable base and the amount financed.
+- Post-tax discounts reduce the amount financed only.
 
-### 3.5 Investment-vs-loan break-even
-- Available cash on hand
-- After-tax HYSA APY (helper text: "for a HYSA at X%, enter X × (1 − marginal tax rate)")
+#### Maryland Tax & Fees
+- Excise tax rate + the itemized fees from §2.2 (per-scenario; defaults seeded from §2.2).
+
+#### Additional Fees
+- Empty by default. User adds custom line items with: label, amount, pre-tax/post-tax toggle.
+- Pre-tax fees are added to the taxable base (taxed) and to OTD/financed amount.
+- Post-tax fees are added to OTD/financed amount without tax.
+
+#### Financing Rates (global)
+Single modal with tabs for **Bank/Credit Union** (default: "Navy Federal Credit Union") and **Manufacturer**. Each lender stores a name plus new and used APR tier schedules. Saved globally in `localStorage` (separate keys per lender) and shared across all scenarios. The active scenario's new/used toggle selects which table is used for that lender's comparison.
 
 ---
 
@@ -68,24 +71,21 @@ Inputs are grouped in the UI by who is contributing what.
 
 ### 4.1 Taxable price
 ```
-taxable_price = MSRP − dealer_discount − customer_cash − trade_in − other_incentive_pretax
+taxable_price = max(0, MSRP − trade_in − pretax_discounts + pretax_fees)
 ```
 
-### 4.2 Tax & fees
+### 4.2 Tax & MD fees
 ```
-excise_tax = taxable_price × 0.065
-total_fees = title + registration + lien + tire + other_fees
+excise_tax = taxable_price × excise_tax_rate
+total_md_fees = title + registration + lien + tire + other_md
 ```
 
-### 4.3 Amount financed
+### 4.3 Out-the-door price + amount financed
 ```
-amount_financed
-  = taxable_price + excise_tax + total_fees
-  − down_payment
-  − manufacturer_rebate
-  − financing_conditional_cash (if manufacturer financing)
-  − other_incentive_posttax
+otd_price = taxable_price + excise_tax + total_md_fees + posttax_fees
+amount_financed = max(0, otd_price − down_payment − posttax_discounts)
 ```
+A single amount-financed value is used for both lender comparisons; the two lenders differ only by APR tier schedule.
 
 ### 4.4 Monthly payment (standard amortization)
 For each row in the APR tier schedule:
@@ -98,38 +98,25 @@ total_interest = (M × n) − P
 total_cost = (M × n) + down_payment + manufacturer_rebate (already paid out)
 ```
 
-### 4.5 Total monthly payment — interest saved
-The user enters a single target total monthly payment. For each APR tier, the extra principal is `max(0, total_monthly_payment − scheduled_payment_for_tier)` — i.e., whatever is left after satisfying that tier's required payment goes to principal. Month-by-month simulation: apply scheduled payment + extra principal each month until balance = 0. Sum interest. Compare to baseline. Output: `interest_saved = baseline_interest − accelerated_interest` (computed per tier). A target below a tier's scheduled payment yields zero extra principal for that tier.
-
-### 4.6 Investment-vs-loan break-even
-Assumes monthly payments come from income (not the cash reserve) and the cash reserve sits in HYSA for the loan term.
-
-For each candidate down payment `D` from `[0, cash_on_hand]`:
-```
-loan_interest(D) = total_interest computed at amount_financed minus D
-foregone_investment(D) = D × ((1 + after_tax_apy/12)^n − 1)
-net_cost(D) = loan_interest(D) + foregone_investment(D)
-```
-Find `D*` that minimizes `net_cost(D)`. Display: optimal down payment, net savings vs. putting full cash down, net savings vs. zero down.
-
 ---
 
 ## 5. Outputs (per scenario)
 
 Headline numbers (always visible):
-- Out-the-door price (taxable_price + tax + fees − all pre-tax incentives)
+- Lowest monthly payment across both lenders (with lender + term + APR label)
+- Out-the-door price
 - Amount financed
-- Monthly payment (per APR tier row)
-- Total interest paid (per APR tier row)
-- Total cost of ownership across loan life (per APR tier row)
-- Interest saved from extra principal (single number)
-- Investment-vs-loan break-even result (optimal down payment + net savings)
+
+Two loan tables shown stacked, one per lender (bank then manufacturer):
+- Monthly payment / total interest / total cost per APR tier
+- Lowest monthly payment and lowest total cost highlighted within each table
 
 ---
 
 ## 6. Scenario Management
 
-- **Named scenarios** held in memory for the current session — not persisted; a browser refresh resets to the default scenario
+- **Named scenarios** persisted to `localStorage` and rehydrated on load
+- **Bank rates** and **Manufacturer rates** persisted globally to `localStorage` (separate keys) — one editable rate sheet per lender, shared across scenarios
 - **Side-by-side comparison view** showing 2+ scenarios as parallel columns, compared at a selectable loan term
 - **Auto-highlighted winning cell per row** (e.g., lowest monthly payment, lowest total paid) — green highlight, no opinionated recommendation
 
@@ -139,7 +126,7 @@ Headline numbers (always visible):
 
 - **Desktop-only** layout. No mobile concessions.
 - **Real-time updates** as user adjusts any input
-- **Number field + slider pattern** for all financial inputs (down payment, APR, trade-in, term, extra principal, etc.)
+- **Number field + slider pattern** for all financial inputs (down payment, APR, trade-in, term, etc.)
 - **APR tier schedule** displays all term options simultaneously, not one at a time
 
 ---
@@ -155,10 +142,10 @@ Explicitly NOT included:
 - EV tax credits
 - Previous vehicle private-sale excise credit
 - Book-value minimum tax check
-- Full amortization tables (only interest saved for extra principal)
-- Months-shaved / new payoff date for extra principal
+- Full amortization tables
+- Extra-principal / accelerated-payoff modeling
 - Dedicated APR break-even solver (achievable interactively via comparison view + sliders)
-- Persistence of any kind — no localStorage, no saved files; scenarios are session-only
+- Investment-vs-loan break-even / opportunity-cost modeling against a HYSA
 - JSON export/import
 - PDF export
 - Shareable URL links

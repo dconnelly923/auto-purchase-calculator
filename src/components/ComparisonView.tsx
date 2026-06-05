@@ -13,11 +13,14 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import { Scenario, computeScenario } from "../scenario";
+import { LenderRates, Scenario, computeScenario } from "../scenario";
+import { LoanScenario } from "../calc/types";
 import { currency, currencyCents, percent } from "../format";
 
 type Props = {
   scenarios: Scenario[];
+  bankRates: LenderRates;
+  manufacturerRates: LenderRates;
 };
 
 type MetricRow = {
@@ -38,25 +41,40 @@ function minIndices(values: (number | undefined)[]): Set<number> {
   return result;
 }
 
-export default function ComparisonView({ scenarios }: Props) {
+function findAtTerm(
+  scenarios: LoanScenario[],
+  term: number,
+): LoanScenario | undefined {
+  return scenarios.find((ls) => ls.termMonths === term);
+}
+
+export default function ComparisonView({
+  scenarios,
+  bankRates,
+  manufacturerRates,
+}: Props) {
   const results = useMemo(
-    () => scenarios.map((s) => computeScenario(s)),
-    [scenarios],
+    () => scenarios.map((s) => computeScenario(s, bankRates, manufacturerRates)),
+    [scenarios, bankRates, manufacturerRates],
   );
 
   const terms = useMemo(() => {
     const set = new Set<number>();
-    scenarios.forEach((s) =>
-      s.aprTiers.forEach((t) => set.add(t.termMonths)),
-    );
+    results.forEach((r) => {
+      r.bank.loanScenarios.forEach((ls) => set.add(ls.termMonths));
+      r.manufacturer.loanScenarios.forEach((ls) => set.add(ls.termMonths));
+    });
     return [...set].sort((a, b) => a - b);
-  }, [scenarios]);
+  }, [results]);
 
   const [term, setTerm] = useState<number>(() => terms[0] ?? 60);
   const activeTerm = terms.includes(term) ? term : (terms[0] ?? 60);
 
-  const loanAtTerm = results.map((r) =>
-    r.loanScenarios.find((ls) => ls.termMonths === activeTerm),
+  const bankAtTerm = results.map((r) =>
+    findAtTerm(r.bank.loanScenarios, activeTerm),
+  );
+  const mfrAtTerm = results.map((r) =>
+    findAtTerm(r.manufacturer.loanScenarios, activeTerm),
   );
 
   const rows: MetricRow[] = [
@@ -65,6 +83,12 @@ export default function ComparisonView({ scenarios }: Props) {
       values: results.map((r) => r.pricing.outTheDoorPrice),
       format: currency,
       highlightMin: true,
+    },
+    {
+      label: "Condition",
+      values: scenarios.map(() => undefined),
+      format: () => "",
+      highlightMin: false,
     },
     {
       label: "Down Payment",
@@ -79,36 +103,44 @@ export default function ComparisonView({ scenarios }: Props) {
       highlightMin: true,
     },
     {
-      label: `APR @ ${activeTerm} mo`,
-      values: loanAtTerm.map((l) => l?.apr),
+      label: `Bank APR @ ${activeTerm} mo`,
+      values: bankAtTerm.map((l) => l?.apr),
       format: percent,
       highlightMin: true,
     },
     {
-      label: `Monthly Payment @ ${activeTerm} mo`,
-      values: loanAtTerm.map((l) => l?.monthlyPayment),
+      label: `Bank Monthly @ ${activeTerm} mo`,
+      values: bankAtTerm.map((l) => l?.monthlyPayment),
       format: currencyCents,
       highlightMin: true,
     },
     {
-      label: `Total Interest @ ${activeTerm} mo`,
-      values: loanAtTerm.map((l) => l?.totalInterest),
-      format: currency,
-      highlightMin: true,
-    },
-    {
-      label: `Total Paid @ ${activeTerm} mo`,
-      values: loanAtTerm.map((l, i) =>
+      label: `Bank Total Paid @ ${activeTerm} mo`,
+      values: bankAtTerm.map((l, i) =>
         l ? l.totalCost + scenarios[i].downPayment : undefined,
       ),
       format: currency,
       highlightMin: true,
     },
     {
-      label: "Optimal Down Payment",
-      values: results.map((r) => r.breakEven.optimalDownPayment),
+      label: `Mfr. APR @ ${activeTerm} mo`,
+      values: mfrAtTerm.map((l) => l?.apr),
+      format: percent,
+      highlightMin: true,
+    },
+    {
+      label: `Mfr. Monthly @ ${activeTerm} mo`,
+      values: mfrAtTerm.map((l) => l?.monthlyPayment),
+      format: currencyCents,
+      highlightMin: true,
+    },
+    {
+      label: `Mfr. Total Paid @ ${activeTerm} mo`,
+      values: mfrAtTerm.map((l, i) =>
+        l ? l.totalCost + scenarios[i].downPayment : undefined,
+      ),
       format: currency,
-      highlightMin: false,
+      highlightMin: true,
     },
   ];
 
@@ -133,8 +165,8 @@ export default function ComparisonView({ scenarios }: Props) {
       <Paper variant="outlined">
         <Box sx={{ p: 2, pb: 0 }}>
           <Typography variant="caption" color="text.secondary">
-            Best value in each row is highlighted. "—" means a scenario has no
-            APR tier at the selected term.
+            Best value in each row is highlighted. "—" means no APR tier at the
+            selected term.
           </Typography>
         </Box>
         <Table size="small">
@@ -150,6 +182,18 @@ export default function ComparisonView({ scenarios }: Props) {
           </TableHead>
           <TableBody>
             {rows.map((row) => {
+              if (row.label === "Condition") {
+                return (
+                  <TableRow key={row.label}>
+                    <TableCell>{row.label}</TableCell>
+                    {scenarios.map((s, i) => (
+                      <TableCell key={i} align="right">
+                        {s.condition}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              }
               const winners = row.highlightMin
                 ? minIndices(row.values)
                 : new Set<number>();

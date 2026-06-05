@@ -14,9 +14,10 @@ import { AprTier } from "../calc/types";
 type Props = {
   tiers: AprTier[];
   onChange: (tiers: AprTier[]) => void;
+  title?: string;
 };
 
-export default function AprTierEditor({ tiers, onChange }: Props) {
+export default function AprTierEditor({ tiers, onChange, title = "APR Tier Schedule" }: Props) {
   const updateTier = (index: number, patch: Partial<AprTier>) => {
     onChange(tiers.map((t, i) => (i === index ? { ...t, ...patch } : t)));
   };
@@ -37,7 +38,7 @@ export default function AprTierEditor({ tiers, onChange }: Props) {
   return (
     <Box>
       <Typography variant="subtitle2" sx={{ mb: 1 }}>
-        APR Tier Schedule
+        {title}
       </Typography>
       <Stack spacing={1}>
         {tiers.map((tier, index) => (

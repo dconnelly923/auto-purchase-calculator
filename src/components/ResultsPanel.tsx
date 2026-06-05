@@ -11,7 +11,9 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import { ScenarioResult } from "../scenario";
+
+import { LenderResult, ScenarioResult } from "../scenario";
+import { LoanScenario } from "../calc/types";
 import { currency, currencyCents, percent } from "../format";
 
 type Props = {
@@ -39,31 +41,40 @@ function lowestIndex(values: number[]): number {
   return best;
 }
 
+type BestPayment = {
+  lender: string;
+  scenario: LoanScenario;
+};
+
+function pickBestMonthly(lenders: LenderResult[]): BestPayment | null {
+  let best: BestPayment | null = null;
+  for (const l of lenders) {
+    for (const s of l.loanScenarios) {
+      if (!best || s.monthlyPayment < best.scenario.monthlyPayment) {
+        best = { lender: l.lender, scenario: s };
+      }
+    }
+  }
+  return best;
+}
+
 export default function ResultsPanel({ result }: Props) {
-  const { pricing, loanScenarios, interestSavedByTier, breakEven, breakEvenTier } =
-    result;
-
-  const showInterestSaved = interestSavedByTier.some((v) => v > 0);
-  const bestMonthly = lowestIndex(loanScenarios.map((s) => s.monthlyPayment));
-  const bestCost = lowestIndex(loanScenarios.map((s) => s.totalCost));
-  const highlight = { backgroundColor: "success.light" };
-
-  const bestMonthlyScenario = loanScenarios[bestMonthly];
+  const { pricing, manufacturer, bank } = result;
+  const bestMonthly = pickBestMonthly([bank, manufacturer]);
 
   return (
     <Stack spacing={2}>
       <Paper variant="outlined" sx={{ p: 3, textAlign: "center" }}>
         <Typography variant="overline" color="text.secondary">
-          Monthly Payment
+          Lowest Monthly Payment
         </Typography>
         <Typography variant="h2" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
-          {bestMonthlyScenario
-            ? currencyCents(bestMonthlyScenario.monthlyPayment)
-            : "—"}
+          {bestMonthly ? currencyCents(bestMonthly.scenario.monthlyPayment) : "—"}
         </Typography>
-        {bestMonthlyScenario && (
+        {bestMonthly && (
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {bestMonthlyScenario.termMonths} mo @ {percent(bestMonthlyScenario.apr)}
+            {bestMonthly.lender} · {bestMonthly.scenario.termMonths} mo @{" "}
+            {percent(bestMonthly.scenario.apr)}
           </Typography>
         )}
       </Paper>
@@ -90,95 +101,71 @@ export default function ResultsPanel({ result }: Props) {
         </Stack>
       </Paper>
 
-      <Paper variant="outlined">
-        <Box sx={{ p: 2, pb: 0 }}>
-          <Typography variant="subtitle2">Loan Options by APR Tier</Typography>
-          <Typography variant="caption" color="text.secondary">
-            Lowest monthly payment and lowest total cost are highlighted.
-          </Typography>
-        </Box>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Term</TableCell>
-              <TableCell>APR</TableCell>
-              <TableCell align="right">Monthly Payment</TableCell>
-              <TableCell align="right">Total Interest</TableCell>
-              <TableCell align="right">Total Cost</TableCell>
-              {showInterestSaved && (
-                <TableCell align="right">Interest Saved*</TableCell>
-              )}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loanScenarios.map((s, i) => (
-              <TableRow key={i}>
-                <TableCell>{s.termMonths} mo</TableCell>
-                <TableCell>{percent(s.apr)}</TableCell>
-                <TableCell
-                  align="right"
-                  sx={i === bestMonthly ? highlight : undefined}
-                >
-                  {currencyCents(s.monthlyPayment)}
-                </TableCell>
-                <TableCell align="right">
-                  {currency(s.totalInterest)}
-                </TableCell>
-                <TableCell
-                  align="right"
-                  sx={i === bestCost ? highlight : undefined}
-                >
-                  {currency(s.totalCost)}
-                </TableCell>
-                {showInterestSaved && (
-                  <TableCell align="right">
-                    {currency(interestSavedByTier[i] ?? 0)}
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {showInterestSaved && (
-          <Box sx={{ p: 1.5 }}>
-            <Typography variant="caption" color="text.secondary">
-              *Interest saved from extra monthly principal payments.
-            </Typography>
-          </Box>
-        )}
-      </Paper>
-
-      <Paper variant="outlined" sx={{ p: 2 }}>
-        <Typography variant="subtitle2" gutterBottom>
-          Investment-vs-Loan Break-Even
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Based on {breakEvenTier?.termMonths ?? "—"} mo @{" "}
-          {breakEvenTier ? percent(breakEvenTier.apr) : "—"}
-        </Typography>
-        <Stack spacing={0.5} sx={{ mt: 1 }}>
-          <Row
-            label="Optimal Down Payment"
-            value={currency(breakEven.optimalDownPayment)}
-          />
-          <Row
-            label="Savings vs. $0 down"
-            value={currency(breakEven.savingsVsZeroDown)}
-          />
-          <Row
-            label="Savings vs. all cash down"
-            value={currency(breakEven.savingsVsFullCash)}
-          />
-        </Stack>
-        <Typography variant="body2" sx={{ mt: 1.5 }}>
-          {breakEven.optimalDownPayment <= 1
-            ? "Keep your cash invested — the HYSA out-earns the loan interest you would save."
-            : breakEven.savingsVsZeroDown < 1
-              ? "Down payment amount has little financial impact at these rates."
-              : `Putting ${currency(breakEven.optimalDownPayment)} down minimizes net cost.`}
-        </Typography>
-      </Paper>
+      <LenderTable result={bank} />
+      <LenderTable result={manufacturer} />
     </Stack>
+  );
+}
+
+function LenderTable({ result }: { result: LenderResult }) {
+  const { lender, loanScenarios } = result;
+  const highlight = { backgroundColor: "success.light" };
+
+  if (loanScenarios.length === 0) {
+    return (
+      <Paper variant="outlined" sx={{ p: 2 }}>
+        <Typography variant="subtitle2">{lender}</Typography>
+        <Typography variant="caption" color="text.secondary">
+          No APR tiers configured.
+        </Typography>
+      </Paper>
+    );
+  }
+
+  const bestMonthly = lowestIndex(loanScenarios.map((s) => s.monthlyPayment));
+  const bestCost = lowestIndex(loanScenarios.map((s) => s.totalCost));
+
+  return (
+    <Paper variant="outlined">
+      <Box sx={{ p: 2, pb: 0 }}>
+        <Typography variant="subtitle2">{lender}</Typography>
+        <Typography variant="caption" color="text.secondary">
+          Lowest monthly payment and lowest total cost are highlighted.
+        </Typography>
+      </Box>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Term</TableCell>
+            <TableCell>APR</TableCell>
+            <TableCell align="right">Monthly Payment</TableCell>
+            <TableCell align="right">Total Interest</TableCell>
+            <TableCell align="right">Total Cost</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {loanScenarios.map((s, i) => (
+            <TableRow key={i}>
+              <TableCell>{s.termMonths} mo</TableCell>
+              <TableCell>{percent(s.apr)}</TableCell>
+              <TableCell
+                align="right"
+                sx={i === bestMonthly ? highlight : undefined}
+              >
+                {currencyCents(s.monthlyPayment)}
+              </TableCell>
+              <TableCell align="right">{currency(s.totalInterest)}</TableCell>
+              <TableCell
+                align="right"
+                sx={i === bestCost ? highlight : undefined}
+              >
+                {currency(s.totalCost)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Paper>
   );
 }
 

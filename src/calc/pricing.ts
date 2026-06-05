@@ -7,14 +7,7 @@ import {
 } from "./types";
 
 export function computeTaxablePrice(p: PricingInputs): number {
-  return Math.max(
-    0,
-    p.msrp -
-      p.dealerDiscount -
-      p.customerCash -
-      p.tradeIn -
-      p.otherIncentivePretax,
-  );
+  return Math.max(0, p.msrp - p.tradeIn - p.pretaxDiscounts + p.pretaxFees);
 }
 
 export function sumFees(fees: MdFees): number {
@@ -36,19 +29,12 @@ export function computePricing(
   const taxablePrice = computeTaxablePrice(pricing);
   const excisTax = taxablePrice * tax.excisTaxRate;
   const totalFees = sumFees(fees);
-  const outTheDoorPrice = taxablePrice + excisTax + totalFees;
-
-  const conditionalCash = financing.useManufacturerFinancing
-    ? pricing.financingConditionalCash
-    : 0;
+  const outTheDoorPrice =
+    taxablePrice + excisTax + totalFees + pricing.posttaxFees;
 
   const amountFinanced = Math.max(
     0,
-    outTheDoorPrice -
-      financing.downPayment -
-      pricing.manufacturerRebate -
-      conditionalCash -
-      pricing.otherIncentivePosttax,
+    outTheDoorPrice - financing.downPayment - pricing.posttaxDiscounts,
   );
 
   return {

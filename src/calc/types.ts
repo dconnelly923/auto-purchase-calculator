@@ -1,12 +1,10 @@
 export type PricingInputs = {
   msrp: number;
-  dealerDiscount: number;
-  customerCash: number;
   tradeIn: number;
-  otherIncentivePretax: number;
-  manufacturerRebate: number;
-  financingConditionalCash: number;
-  otherIncentivePosttax: number;
+  pretaxDiscounts: number;
+  posttaxDiscounts: number;
+  pretaxFees: number;
+  posttaxFees: number;
 };
 
 export type MdFees = {
@@ -31,7 +29,6 @@ export type PricingResult = {
 
 export type FinancingInputs = {
   downPayment: number;
-  useManufacturerFinancing: boolean;
 };
 
 export type AprTier = {

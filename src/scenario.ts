@@ -9,119 +9,167 @@ import {
 } from "./calc/types";
 import { computePricing } from "./calc/pricing";
 import { evaluateAprTiers } from "./calc/amortization";
-import { interestSavedFromExtraPrincipal } from "./calc/extraPrincipal";
-import { findOptimalDownPayment, BreakEvenResult } from "./calc/breakEven";
+
+export type VehicleCondition = "new" | "used";
+
+export type LineItem = {
+  id: string;
+  label: string;
+  amount: number;
+  isPretax: boolean;
+};
 
 export type Scenario = {
   name: string;
-  // Pricing
+  condition: VehicleCondition;
   msrp: number;
-  dealerDiscount: number;
-  customerCash: number;
   tradeIn: number;
-  manufacturerRebate: number;
-  financingConditionalCash: number;
-  otherIncentive: number;
-  otherIncentiveIsPretax: boolean;
-  // Fees & tax
+  downPayment: number;
   fees: MdFees;
   excisTaxRate: number;
-  // Financing
-  downPayment: number;
-  useManufacturerFinancing: boolean;
-  totalMonthlyPayment: number;
-  aprTiers: AprTier[];
-  // Break-even
-  cashOnHand: number;
-  afterTaxApyPercent: number;
-  breakEvenTierIndex: number;
+  discounts: LineItem[];
+  additionalFees: LineItem[];
+};
+
+export type LenderRates = {
+  name: string;
+  newTiers: AprTier[];
+  usedTiers: AprTier[];
+};
+
+export type BankRates = LenderRates;
+
+export type LenderResult = {
+  lender: string;
+  loanScenarios: LoanScenario[];
 };
 
 export type ScenarioResult = {
   pricing: PricingResult;
-  loanScenarios: LoanScenario[];
-  interestSavedByTier: number[];
-  breakEven: BreakEvenResult;
-  breakEvenTier: AprTier | undefined;
+  manufacturer: LenderResult;
+  bank: LenderResult;
 };
+
+export function newLineItem(label = "", amount = 0, isPretax = true): LineItem {
+  return {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    label,
+    amount,
+    isPretax,
+  };
+}
 
 export function makeDefaultScenario(name = "Scenario 1"): Scenario {
   return {
     name,
+    condition: "new",
     msrp: 44000,
-    dealerDiscount: 1500,
-    customerCash: 0,
     tradeIn: 4000,
-    manufacturerRebate: 0,
-    financingConditionalCash: 0,
-    otherIncentive: 0,
-    otherIncentiveIsPretax: true,
+    downPayment: 10000,
     fees: { ...DEFAULT_MD_FEES },
     excisTaxRate: DEFAULT_TAX_CONFIG.excisTaxRate,
-    downPayment: 10000,
-    useManufacturerFinancing: true,
-    totalMonthlyPayment: 0,
-    aprTiers: [
+    discounts: [],
+    additionalFees: [],
+  };
+}
+
+export function makeDefaultBankRates(): LenderRates {
+  return {
+    name: "Navy Federal Credit Union",
+    newTiers: [
+      { termMonths: 36, apr: 4.54 },
+      { termMonths: 48, apr: 4.54 },
+      { termMonths: 60, apr: 4.54 },
+      { termMonths: 72, apr: 5.34 },
+    ],
+    usedTiers: [
+      { termMonths: 36, apr: 5.04 },
+      { termMonths: 48, apr: 5.04 },
+      { termMonths: 60, apr: 5.04 },
+      { termMonths: 72, apr: 6.34 },
+    ],
+  };
+}
+
+export function makeDefaultManufacturerRates(): LenderRates {
+  return {
+    name: "Manufacturer",
+    newTiers: [
       { termMonths: 36, apr: 0 },
       { termMonths: 48, apr: 1.9 },
       { termMonths: 60, apr: 3.9 },
       { termMonths: 72, apr: 5.9 },
     ],
-    cashOnHand: 15000,
-    afterTaxApyPercent: 3,
-    breakEvenTierIndex: 2,
+    usedTiers: [
+      { termMonths: 36, apr: 4.9 },
+      { termMonths: 48, apr: 5.9 },
+      { termMonths: 60, apr: 6.9 },
+      { termMonths: 72, apr: 7.9 },
+    ],
   };
+}
+
+function sumLineItems(items: LineItem[], pretax: boolean): number {
+  return items
+    .filter((i) => i.isPretax === pretax)
+    .reduce((acc, i) => acc + (Number.isFinite(i.amount) ? i.amount : 0), 0);
 }
 
 function scenarioToPricingInputs(s: Scenario): PricingInputs {
   return {
     msrp: s.msrp,
-    dealerDiscount: s.dealerDiscount,
-    customerCash: s.customerCash,
     tradeIn: s.tradeIn,
-    otherIncentivePretax: s.otherIncentiveIsPretax ? s.otherIncentive : 0,
-    manufacturerRebate: s.manufacturerRebate,
-    financingConditionalCash: s.financingConditionalCash,
-    otherIncentivePosttax: s.otherIncentiveIsPretax ? 0 : s.otherIncentive,
+    pretaxDiscounts: sumLineItems(s.discounts, true),
+    posttaxDiscounts: sumLineItems(s.discounts, false),
+    pretaxFees: sumLineItems(s.additionalFees, true),
+    posttaxFees: sumLineItems(s.additionalFees, false),
   };
 }
 
-export function computeScenario(s: Scenario): ScenarioResult {
+function evaluateLender(
+  lender: string,
+  amountFinanced: number,
+  tiers: AprTier[],
+): LenderResult {
+  return {
+    lender,
+    loanScenarios: evaluateAprTiers(amountFinanced, tiers),
+  };
+}
+
+function tiersForCondition(rates: LenderRates, condition: VehicleCondition) {
+  return condition === "new" ? rates.newTiers : rates.usedTiers;
+}
+
+function lenderLabel(rates: LenderRates, condition: VehicleCondition) {
+  return `${rates.name} (${condition})`;
+}
+
+export function computeScenario(
+  s: Scenario,
+  bankRates: LenderRates,
+  manufacturerRates: LenderRates,
+): ScenarioResult {
   const pricingInputs = scenarioToPricingInputs(s);
   const taxConfig = { excisTaxRate: s.excisTaxRate };
 
   const pricing = computePricing(pricingInputs, s.fees, taxConfig, {
     downPayment: s.downPayment,
-    useManufacturerFinancing: s.useManufacturerFinancing,
   });
 
-  const loanScenarios = evaluateAprTiers(pricing.amountFinanced, s.aprTiers);
+  const manufacturer = evaluateLender(
+    lenderLabel(manufacturerRates, s.condition),
+    pricing.amountFinanced,
+    tiersForCondition(manufacturerRates, s.condition),
+  );
+  const bank = evaluateLender(
+    lenderLabel(bankRates, s.condition),
+    pricing.amountFinanced,
+    tiersForCondition(bankRates, s.condition),
+  );
 
-  const interestSavedByTier = loanScenarios.map((ls) => {
-    const extra = Math.max(0, s.totalMonthlyPayment - ls.monthlyPayment);
-    return interestSavedFromExtraPrincipal(
-      pricing.amountFinanced,
-      ls.apr,
-      ls.termMonths,
-      extra,
-    );
-  });
-
-  const zeroDownPricing = computePricing(pricingInputs, s.fees, taxConfig, {
-    downPayment: 0,
-    useManufacturerFinancing: s.useManufacturerFinancing,
-  });
-
-  const breakEvenTier =
-    s.aprTiers[s.breakEvenTierIndex] ?? s.aprTiers[0];
-
-  const breakEven = findOptimalDownPayment({
-    amountFinancedAtZeroDown: zeroDownPricing.amountFinanced,
-    aprPercent: breakEvenTier?.apr ?? 0,
-    termMonths: breakEvenTier?.termMonths ?? 60,
-    cashOnHand: s.cashOnHand,
-    afterTaxApyPercent: s.afterTaxApyPercent,
-  });
-
-  return { pricing, loanScenarios, interestSavedByTier, breakEven, breakEvenTier };
+  return { pricing, manufacturer, bank };
 }
