@@ -8,6 +8,7 @@ import {
   makeDefaultManufacturerRates,
   makeDefaultScenario,
   newLineItem,
+  scenarioDisplayName,
 } from "./scenario";
 import ScenarioBar, { ViewMode } from "./components/ScenarioBar";
 import ScenarioEditor from "./components/ScenarioEditor";
@@ -16,19 +17,49 @@ import ComparisonView from "./components/ComparisonView";
 const SCENARIO_STORAGE_KEY = "auto-purchase-calculator:state:v1";
 const BANK_RATES_STORAGE_KEY = "auto-purchase-calculator:bank-rates:v1";
 const MFR_RATES_STORAGE_KEY = "auto-purchase-calculator:manufacturer-rates:v1";
+const LEGACY_VEHICLES_STORAGE_KEY = "auto-purchase-calculator:vehicles:v1";
 
 type PersistedState = {
   scenarios: unknown[];
   activeIndex: number;
 };
 
-function migrateScenario(raw: unknown): Scenario {
+type LegacyVehicle = {
+  id: string;
+  title?: string;
+  imageUrl?: string;
+  listingUrl?: string;
+  vin?: string;
+  condition?: "new" | "used";
+};
+
+function loadLegacyVehicles(): Record<string, LegacyVehicle> {
+  try {
+    const raw = localStorage.getItem(LEGACY_VEHICLES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return {};
+    const byId: Record<string, LegacyVehicle> = {};
+    (parsed as LegacyVehicle[]).forEach((v) => {
+      if (v && typeof v.id === "string") byId[v.id] = v;
+    });
+    return byId;
+  } catch {
+    return {};
+  }
+}
+
+function migrateScenario(
+  raw: unknown,
+  legacyVehicles: Record<string, LegacyVehicle>,
+): Scenario {
   const base = makeDefaultScenario();
   if (!raw || typeof raw !== "object") return base;
   const r = raw as Record<string, unknown> & {
     condition?: Scenario["condition"];
     discounts?: LineItem[];
     additionalFees?: LineItem[];
+    vehicleId?: string;
   };
 
   const legacyDiscounts: LineItem[] = [];
@@ -62,10 +93,24 @@ function migrateScenario(raw: unknown): Scenario {
       ),
     );
 
+  const linkedVehicle =
+    typeof r.vehicleId === "string" ? legacyVehicles[r.vehicleId] : undefined;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+
   return {
     ...base,
     ...r,
-    condition: r.condition === "used" ? "used" : "new",
+    condition:
+      r.condition === "used" || linkedVehicle?.condition === "used"
+        ? "used"
+        : "new",
+    imageUrl: str(r.imageUrl) || str(linkedVehicle?.imageUrl) || "",
+    listingUrl: str(r.listingUrl) || str(linkedVehicle?.listingUrl) || "",
+    vin: str(r.vin) || str(linkedVehicle?.vin) || "",
+    name:
+      typeof r.name === "string" && r.name
+        ? r.name
+        : linkedVehicle?.title || base.name,
     discounts: Array.isArray(r.discounts)
       ? r.discounts
       : legacyDiscounts.length
@@ -85,8 +130,9 @@ function loadScenarios(): { scenarios: Scenario[]; activeIndex: number } | null 
     if (!Array.isArray(parsed.scenarios) || parsed.scenarios.length === 0) {
       return null;
     }
+    const legacyVehicles = loadLegacyVehicles();
     return {
-      scenarios: parsed.scenarios.map(migrateScenario),
+      scenarios: parsed.scenarios.map((s) => migrateScenario(s, legacyVehicles)),
       activeIndex: parsed.activeIndex ?? 0,
     };
   } catch {
@@ -120,7 +166,7 @@ function loadLenderRates(
 export default function App() {
   const initial = loadScenarios();
   const [scenarios, setScenarios] = useState<Scenario[]>(
-    () => initial?.scenarios ?? [makeDefaultScenario("Scenario 1")],
+    () => initial?.scenarios ?? [makeDefaultScenario()],
   );
   const [activeIndex, setActiveIndex] = useState(() =>
     initial ? Math.min(initial.activeIndex, initial.scenarios.length - 1) : 0,
@@ -169,10 +215,7 @@ export default function App() {
     );
 
   const addScenario = () => {
-    setScenarios((prev) => [
-      ...prev,
-      makeDefaultScenario(`Scenario ${prev.length + 1}`),
-    ]);
+    setScenarios((prev) => [...prev, makeDefaultScenario()]);
     setActiveIndex(scenarios.length);
     setMode("edit");
   };
@@ -183,7 +226,7 @@ export default function App() {
       const copy: Scenario = {
         ...src,
         fees: { ...src.fees },
-        name: `${src.name} (copy)`,
+        name: `${scenarioDisplayName(src, activeIndex)} (copy)`,
       };
       const next = [...prev];
       next.splice(activeIndex + 1, 0, copy);
@@ -193,10 +236,14 @@ export default function App() {
     setMode("edit");
   };
 
-  const deleteActive = () => {
+  const deleteAt = (index: number) => {
     if (scenarios.length <= 1) return;
-    setScenarios((prev) => prev.filter((_, i) => i !== activeIndex));
-    setActiveIndex((prev) => Math.max(0, prev - (activeIndex > 0 ? 1 : 0)));
+    setScenarios((prev) => prev.filter((_, i) => i !== index));
+    setActiveIndex((prev) => {
+      if (index < prev) return prev - 1;
+      if (index === prev) return Math.max(0, prev - 1);
+      return prev;
+    });
     setMode("edit");
   };
 
@@ -207,11 +254,8 @@ export default function App() {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
+      <Typography variant="h3" component="h1" sx={{ mb: 3, fontWeight: 700 }}>
         Auto Purchase Calculator
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Maryland mid-size pickup truck offer comparison.
       </Typography>
 
       <ScenarioBar
@@ -221,6 +265,7 @@ export default function App() {
         onSelect={selectScenario}
         onAdd={addScenario}
         onCompare={() => setMode("compare")}
+        onDeleteScenario={deleteAt}
       />
 
       {mode === "edit" ? (
@@ -232,8 +277,6 @@ export default function App() {
           onBankRatesChange={setBankRates}
           onManufacturerRatesChange={setManufacturerRates}
           onDuplicate={duplicateActive}
-          onDelete={deleteActive}
-          canDelete={scenarios.length > 1}
         />
       ) : (
         <ComparisonView

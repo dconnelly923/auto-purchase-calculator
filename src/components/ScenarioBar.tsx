@@ -1,7 +1,8 @@
 import { Box, Button, IconButton, Stack, Tab, Tabs } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import CloseIcon from "@mui/icons-material/Close";
 import CompareArrowsIcon from "@mui/icons-material/CompareArrows";
-import { Scenario } from "../scenario";
+import { Scenario, scenarioDisplayName } from "../scenario";
 
 export type ViewMode = "edit" | "compare";
 
@@ -12,6 +13,7 @@ type Props = {
   onSelect: (index: number) => void;
   onAdd: () => void;
   onCompare: () => void;
+  onDeleteScenario: (index: number) => void;
 };
 
 export default function ScenarioBar({
@@ -21,7 +23,9 @@ export default function ScenarioBar({
   onSelect,
   onAdd,
   onCompare,
+  onDeleteScenario,
 }: Props) {
+  const canDelete = scenarios.length > 1;
   return (
     <Stack
       direction="row"
@@ -35,7 +39,40 @@ export default function ScenarioBar({
         scrollButtons="auto"
       >
         {scenarios.map((s, i) => (
-          <Tab key={i} label={s.name || `Scenario ${i + 1}`} value={i} />
+          <Tab
+            key={i}
+            value={i}
+            label={scenarioDisplayName(s, i)}
+            iconPosition="end"
+            icon={
+              canDelete ? (
+                <Box
+                  component="span"
+                  role="button"
+                  aria-label="delete scenario"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteScenario(i);
+                  }}
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    p: 0.25,
+                    borderRadius: "50%",
+                    color: "text.secondary",
+                    "&:hover": {
+                      color: "error.main",
+                      bgcolor: "action.hover",
+                    },
+                  }}
+                >
+                  <CloseIcon sx={{ fontSize: "1rem" }} />
+                </Box>
+              ) : undefined
+            }
+            sx={{ minHeight: 48 }}
+          />
         ))}
       </Tabs>
       <IconButton aria-label="add scenario" onClick={onAdd} size="small">

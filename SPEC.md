@@ -41,13 +41,29 @@ A browser-based tool for evaluating mid-size pickup truck purchase offers in Mar
 
 Inputs are grouped in the UI by who is contributing what.
 
+Each scenario represents one vehicle. The vehicle's identifying metadata (title, picture, listing URL, VIN, new/used) is stored directly on the scenario.
+
 ### 3.1 Main panel (always visible)
-- Vehicle condition toggle: **new** or **used**
-- Purchase price (MSRP / agreed)
-- Down payment
-- Trade-in allowance (pre-tax, MD-deductible)
+- Vehicle header card: thumbnail + display name + condition + purchase price + VIN + listing link (clickable to open Vehicle Details)
+- Duplicate / delete scenario actions
+- A stack of settings buttons opening each of the modals in §3.2
+
+Display name resolves as: `name` override → composed `Year Make Model` → `Scenario N`. The same value is used for the tab label.
 
 ### 3.2 Settings modals (opened from buttons under the main panel)
+
+#### Vehicle Details
+- New/Used toggle
+- Year (number, 0 = unset), Make, Model
+- Optional Title override (used as display name when set, otherwise falls back to `Year Make Model`)
+- Purchase Price (MSRP / agreed)
+- VIN (auto-uppercased, capped at 17 chars; no checksum validation)
+- Image URL (rendered as thumbnail; URL-only, no upload)
+- Listing URL (open in new tab)
+
+#### Down Payment & Trade-In
+- Down payment (cash from buyer at signing)
+- Trade-in allowance (pre-tax, MD-deductible from taxable base)
 
 #### Discounts
 - Empty by default. User adds custom line items with: label, amount, pre-tax/post-tax toggle.

@@ -3,12 +3,12 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   Stack,
+  Switch,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -96,17 +96,19 @@ export default function LineItemsModal({
                   },
                 }}
               />
-              <ToggleButtonGroup
-                value={item.isPretax ? "pre" : "post"}
-                exclusive
-                size="small"
-                onChange={(_, v: "pre" | "post" | null) =>
-                  v && update(item.id, { isPretax: v === "pre" })
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={item.isPretax}
+                    onChange={(e) =>
+                      update(item.id, { isPretax: e.target.checked })
+                    }
+                  />
                 }
-              >
-                <ToggleButton value="pre">Pre-tax</ToggleButton>
-                <ToggleButton value="post">Post-tax</ToggleButton>
-              </ToggleButtonGroup>
+                label={item.isPretax ? "Pre-tax" : "Post-tax"}
+                sx={{ mr: 0, minWidth: 100 }}
+              />
               <IconButton
                 aria-label="remove"
                 size="small"

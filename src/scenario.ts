@@ -20,8 +20,14 @@ export type LineItem = {
 };
 
 export type Scenario = {
-  name: string;
+  name: string; // optional friendly title override; falls back to year/make/model
   condition: VehicleCondition;
+  year: number; // 0 = unset
+  make: string;
+  model: string;
+  imageUrl: string;
+  listingUrl: string;
+  vin: string;
   msrp: number;
   tradeIn: number;
   downPayment: number;
@@ -50,22 +56,39 @@ export type ScenarioResult = {
   bank: LenderResult;
 };
 
-export function newLineItem(label = "", amount = 0, isPretax = true): LineItem {
-  return {
-    id:
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    label,
-    amount,
-    isPretax,
-  };
+export function scenarioDisplayName(s: Scenario, index?: number): string {
+  if (s.name.trim()) return s.name.trim();
+  const composed = [
+    s.year > 0 ? String(s.year) : "",
+    s.make.trim(),
+    s.model.trim(),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (composed) return composed;
+  return typeof index === "number" ? `Scenario ${index + 1}` : "Untitled";
 }
 
-export function makeDefaultScenario(name = "Scenario 1"): Scenario {
+function makeId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+export function newLineItem(label = "", amount = 0, isPretax = true): LineItem {
+  return { id: makeId(), label, amount, isPretax };
+}
+
+export function makeDefaultScenario(name = ""): Scenario {
   return {
     name,
     condition: "new",
+    year: 0,
+    make: "",
+    model: "",
+    imageUrl: "",
+    listingUrl: "",
+    vin: "",
     msrp: 44000,
     tradeIn: 4000,
     downPayment: 10000,
