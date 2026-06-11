@@ -51,7 +51,7 @@ export default function ScenarioEditor({
 
   return (
     <Stack direction="row" spacing={3} alignItems="flex-start">
-      <Box sx={{ flex: "0 0 420px" }}>
+      <Box sx={{ flex: "0 0 340px" }}>
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Stack spacing={1}>
             <SettingButton

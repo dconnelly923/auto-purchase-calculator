@@ -254,7 +254,7 @@ export default function App() {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Typography variant="h3" component="h1" sx={{ mb: 3, fontWeight: 700 }}>
+      <Typography variant="h5" component="h1" sx={{ mb: 3, fontWeight: 700 }}>
         Auto Purchase Calculator
       </Typography>
 
